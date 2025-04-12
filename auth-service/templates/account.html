@@ -1,0 +1,22 @@
+<!-- templates/account.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Info</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Account Information</h1>
+    <h2>Welcome, {{ user }}</h2>
+    <h3>Your Transactions</h3>
+    {% if transactions %}
+        <ul>
+        {% for txn in transactions %}
+            <li>{{ txn.date }} – {{ txn.desc }}: €{{ txn.amount }}</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No transactions found.</p>
+    {% endif %}
