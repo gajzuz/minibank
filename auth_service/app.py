@@ -7,28 +7,51 @@ from flask_login import (
     current_user,
     logout_user,
 )
+from flask_sqlalchemy import SQLAlchemy
 import requests
+import os
 
 app = Flask(__name__, template_folder="templates")
 app.secret_key = "your-secret-key"
 
+# --- Database Config ---
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASS']}@"
+    f"{os.environ['DB_HOST']}:5432/{os.environ['DB_NAME']}"
+)
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+
+# --- Flask-Login Setup ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 
 
-class User(UserMixin):
-    def __init__(self, id):
-        self.id = id
+# --- User Model ---
+class User(db.Model, UserMixin):
+    id = db.Column(db.String(80), primary_key=True)
+    password = db.Column(db.String(200), nullable=False)
 
 
-users = {"user1": {"password": "password123"}}  # Mocked users
-
-
+# --- Load user for Flask-Login ---
 @login_manager.user_loader
 def load_user(user_id):
-    return User(user_id)
+    return User.query.get(user_id)
 
 
+# --- Initialize Database with One User ---
+@app.before_request
+def ensure_db_setup():
+    if not hasattr(app, "db_initialized"):
+        with app.app_context():
+            db.create_all()
+            if not User.query.get("user1"):
+                db.session.add(User(id="user1", password="password123"))
+                db.session.commit()
+        app.db_initialized = True
+
+
+# --- Routes ---
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -39,8 +62,8 @@ def login():
     if request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
-        if username in users and users[username]["password"] == password:
-            user = User(username)
+        user = User.query.get(username)
+        if user and user.password == password:
             login_user(user)
             return redirect(url_for("account"))
         else:
@@ -53,7 +76,6 @@ def login():
 def account():
     user_id = current_user.id
     try:
-        # REST call to transaction-service
         response = requests.get(
             f"http://transaction-service:5006/transactions/{user_id}"
         )
@@ -72,5 +94,6 @@ def logout():
     return redirect(url_for("login"))
 
 
+# --- Run the app ---
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5005)
